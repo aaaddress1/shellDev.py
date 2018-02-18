@@ -1,7 +1,9 @@
 ![螢幕快照 2018-02-18 上午10.55.26.png](resources/33032DBAA305F49DAAC4705D6967CB15.png)
 
 ## shellDev.py
-A simple python script for building windows 32bit/64bit shellcode in C. 
+
+A simple python script for building windows 32bit/64bit shellcode in C.
+
 以 C 語言快速開發支持 Windows 32/64 位元的 Shellcode 之 Python 腳本。
 
 ## Preinstall（前置安裝）
@@ -58,14 +60,9 @@ void shellFunc shellEntry(void) {
 }
 ```
 
-using `getModAddrByHash()` and `getFuncAddrByHash()` instead of `getModAddr()` and `getFuncAddr()`, you can build smaller size shellcode (only 496 bytes). 
+using `getModAddrByHash()` and `getFuncAddrByHash()` instead of `getModAddr()` and `getFuncAddr()`, you can build smaller size shellcode (only 496 bytes). how to get hash of a text? you can use `modHash()` (defined in [shellDev.hpp](shellDev.hpp)) to get string hash.
 
-使用 `getModAddrByHash()` 與 `getFuncAddrByHash()` 函數來取得函數地址與模組地址，減少使用 `getModAddr()`與 `getFuncAddr()` 函數, 你將可以取得較短的 Shellcode (only 496 bytes).
-
-
-how to get hash of a text? you can use `modHash()` (defined in [shellDev.hpp](shellDev.hpp)) to get string hash.
-
-那麼雜湊值（Hash）如何取得呢？你可以透過內置的函數 `modHash()` (定義於 [shellDev.hpp](https://github.com/aaaddress1/shellDev.py/blob/master/shellDev.hpp) 內) 取得字串的雜湊結果。
+使用 `getModAddrByHash()` 與 `getFuncAddrByHash()` 函數來取得函數地址與模組地址，減少使用 `getModAddr()`與 `getFuncAddr()` 函數, 你將可以取得較短的 Shellcode (only 496 bytes). 那麼雜湊值（Hash）如何取得呢？你可以透過內置的函數 `modHash()` (定義於 [shellDev.hpp](https://github.com/aaaddress1/shellDev.py/blob/master/shellDev.hpp) 內) 取得字串的雜湊結果.
 
 e.g. 
 * modHash("kernel32.dll") = 0xb40d1235
@@ -103,7 +100,9 @@ void shellFunc shellEntry(void) {
 	msgbox(0, msg, title, 0);
 }
 ```
+
 you must define your own function in `shellFunc` calling convention if you want to declared a new function.
+
 如果你有興趣自行額外設計函數在 Shellcode 內調用，務必記得自行設計的函數必須遵守 `shellFunc` 呼叫約制（如上例示範）
 
 ## Limitation（限制）
