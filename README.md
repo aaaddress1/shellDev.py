@@ -91,7 +91,6 @@ PVOID shellFunc getUsr32Mod() {
 	return usr32Mod;
 }
 void shellFunc shellEntry(void) {
-	char msgboxastr[] = "MessageBoxA";
 	PVOID addr = getFuncAddrByHash
 	(
 		(HMODULE)getUsr32Mod(),
