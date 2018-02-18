@@ -37,6 +37,7 @@ the foregoing example will be build in a large size shellcode (624 bytes), a bet
 
 ```cpp
 #include <shellDev>
+
 void shellFunc shellEntry(void) {
 	PVOID addr;
 
