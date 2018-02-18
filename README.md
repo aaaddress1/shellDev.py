@@ -10,25 +10,25 @@ A simple python script for building windows 32bit/64bit shellcode in C.
 ## shellDev Script Example: msg.cpp
 
 ```cpp
-  #include <shellDev>
-  
-  void shellFunc shellEntry(void) {
-  	PVOID addr;
-  
-  	char knl32[] = "kernel32.dll";
-  	char ldLibastr[] = "LoadLibraryA";
-  	addr = getFuncAddr(getModAddr(knl32), ldLibastr);
-  	func<decltype(&LoadLibraryA)> loadLibA((FARPROC)addr);
-  
-  	char usr32[] = "user32.dll";
-  	char msgboxastr[] = "MessageBoxA";
-  	addr = getFuncAddr(loadLibA(usr32), msgboxastr);
-  	func<decltype(&MessageBoxA)> msgbox((FARPROC)addr);
-  
-  	char msg[] = "top-level message here!";
-  	char title[] = "you must know it!";
-  	msgbox(0, msg, title, 0);
-  }
+#include <shellDev>
+
+void shellFunc shellEntry(void) {
+    PVOID addr;
+
+    char knl32[] = "kernel32.dll";
+    char ldLibastr[] = "LoadLibraryA";
+    addr = getFuncAddr(getModAddr(knl32), ldLibastr);
+    func<decltype(&LoadLibraryA)> loadLibA((FARPROC)addr);
+
+    char usr32[] = "user32.dll";
+    char msgboxastr[] = "MessageBoxA";
+    addr = getFuncAddr(loadLibA(usr32), msgboxastr);
+    func<decltype(&MessageBoxA)> msgbox((FARPROC)addr);
+
+    char msg[] = "top-level message here!";
+    char title[] = "you must know it!";
+    msgbox(0, msg, title, 0);
+}
 ```
 
 you can easily get module memory address by `getModAddr()` (like windows api `GetModuleHandleA`) and get function address by `getFuncAddr()` (like windows api `GetProcAddress`).
@@ -36,6 +36,7 @@ you can easily get module memory address by `getModAddr()` (like windows api `Ge
 the foregoing example will be build in a large size shellcode (624 bytes), a better example:
 
 ```cpp
+#include <shellDev>
 void shellFunc shellEntry(void) {
 	PVOID addr;
 
