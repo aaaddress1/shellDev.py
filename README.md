@@ -10,7 +10,33 @@ A simple python script for building windows 32bit/64bit shellcode in C.
 * Python 2.7 <https://www.python.org/download/releases/2.7/>
 * MinGW-w64 <https://sourceforge.net/projects/mingw-w64/>
 
-## shellDev Script Example: msg.cpp（shellDev 腳本範例）
+## shellDev.py Quickly Start 
+
+demo.cpp（shellDev 腳本範例）
+
+```cpp
+/* Beep & Alert.
+ * by aaaddress1@chroot.org
+ */
+#include <shellDev>
+
+void shellFunc shellEntry(void) {
+    PVOID addr;
+
+	fetchAPI(msgbox, MessageBoxA);
+	fetchAPI(bp, Beep);
+
+	bp(100, 100);
+	msgbox(0, "hello", "word", 0);
+}
+```
+Using function `fetchAPI(defineAPI, ApiName)` to define a Win32 API as a new function you want. By this method, it's a easier to call any Win32 API. `fetchAPI` lookup targeted Win32 API in loaded modules, and mark it as new function you like.
+
+可以透過函數 `fetchAPI(defineAPI, ApiName)` 將指定的 Win32 系統 API 定義為一個你想使用的函數名. 透過此功能你可以很輕易的自動模糊搜尋記憶體已知的系統 Win32 API 並且以你想要的函數名調用.
+
+## Advanced Example
+
+msg.cpp（shellDev 腳本範例）
 
 ```cpp
 #include <shellDev>
