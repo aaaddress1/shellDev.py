@@ -1,13 +1,13 @@
 title = \
 """
-      _          _ _ _____             
-     | |        | | |  __ \            
+      _          _ _ _____
+     | |        | | |  __ \
   ___| |__   ___| | | |  | | _____   __
  / __| '_ \ / _ \ | | |  | |/ _ \ \ / /
- \__ \ | | |  __/ | | |__| |  __/\ V / 
- |___/_| |_|\___|_|_|_____/ \___| \_/  
-                                       
-v1.0 by aaaddress1@chroot.org
+ \__ \ | | |  __/ | | |__| |  __/\ V /
+ |___/_| |_|\___|_|_|_____/ \___| \_/
+
+v1.1 by aaaddress1@chroot.org
 """
 
 import subprocess
@@ -15,6 +15,7 @@ import re
 import os
 import sys
 from optparse import OptionParser
+import hashlib
 
 shellDevHpp = \
 """
@@ -173,14 +174,6 @@ typedef struct _LDR_DATA_TABLE_ENTRY64
 # define NOINLINE __declspec(noinline)
 # define shellFunc __attribute__((fastcall)) __attribute__((section("shell"))) NOINLINE
 
-#define getModAddr(libraryName) (HMODULE)( \
-	getModAddrByHash(modHash(libraryName)) \
-	)
-
-#define getFuncAddr(libraryAddress, functionName) (PVOID)( \
-	getFuncAddrByHash(libraryAddress, modHash(functionName)) \
-	)
-
 void shellFunc shellEntry(void);
 
 template<class T> struct func {
@@ -211,7 +204,7 @@ PVOID shellFunc getModAddrByHash(uint32_t targetHash)
 {
 #ifdef _WIN64
 	PPEB64 pPEB = (PPEB64)__readgsqword(0x60);
-	PLIST_ENTRY header = &(pPEB->Ldr->InMemoryOrderModuleList); 
+	PLIST_ENTRY header = &(pPEB->Ldr->InMemoryOrderModuleList);
 	PLIST_ENTRY curr = header->Flink;
 	for (; curr != header; curr = curr->Flink) {
 		LDR_DATA_TABLE_ENTRY64 *data = CONTAINING_RECORD(curr, LDR_DATA_TABLE_ENTRY64, InMemoryOrderModuleList);
@@ -239,7 +232,11 @@ PVOID shellFunc getFuncAddrByHash(HMODULE module, uint32_t targetHash)
 	PIMAGE_NT_HEADERS32 ntHeaders = (PIMAGE_NT_HEADERS32)((LPBYTE)module + ((PIMAGE_DOS_HEADER)module)->e_lfanew);
 #endif
 	PIMAGE_DATA_DIRECTORY impDir = &ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+	if (impDir->VirtualAddress == 0) return (size_t)0;
+
 	PIMAGE_EXPORT_DIRECTORY ied = (PIMAGE_EXPORT_DIRECTORY)((LPBYTE)module + impDir->VirtualAddress);
+	if (ied->NumberOfNames == 0) return (size_t)0;
+
 	for (DWORD i = 0; i < ied->NumberOfNames; i++)
 	{
 		LPDWORD curName = (LPDWORD)(((LPBYTE)module) + ied->AddressOfNames + i * sizeof(DWORD));
@@ -252,12 +249,46 @@ PVOID shellFunc getFuncAddrByHash(HMODULE module, uint32_t targetHash)
 	}
 	return (size_t)0;
 }
+
+PVOID blindFindFunc(uint32_t funcNameHash)
+{
+	PVOID retAddr = (size_t)0;
+#ifdef _WIN64
+	PPEB64 pPEB = (PPEB64)__readgsqword(0x60);
+	PLIST_ENTRY header = &(pPEB->Ldr->InMemoryOrderModuleList);
+	PLIST_ENTRY curr = header->Flink;
+	for (; curr != header; curr = curr->Flink) {
+		LDR_DATA_TABLE_ENTRY64 *data = CONTAINING_RECORD(curr, LDR_DATA_TABLE_ENTRY64, InMemoryOrderModuleList);
+		retAddr = getFuncAddrByHash((HMODULE)data->DllBase, funcNameHash);
+		if (retAddr) return retAddr;
+	}
+#else
+	PPEB32 pPEB = (PPEB32)__readfsdword(0x30);
+	PLIST_ENTRY header = &(pPEB->Ldr->InMemoryOrderModuleList);
+	PLIST_ENTRY curr = header->Flink;
+
+	for (; curr != header; curr = curr->Flink) {
+		LDR_DATA_TABLE_ENTRY32 *data = CONTAINING_RECORD(curr, LDR_DATA_TABLE_ENTRY32, InMemoryOrderModuleList);
+		retAddr = getFuncAddrByHash((HMODULE)data->DllBase, funcNameHash);
+		if (retAddr) return retAddr;
+	}
+#endif
+	return (size_t)0;
+}
+
+#define getModAddr(libraryName) (HMODULE)( \
+	getModAddrByHash(modHash(libraryName)) \
+	)
+
+#define getFuncAddr(libraryAddress, functionName) (PVOID)( \
+	getFuncAddrByHash(libraryAddress, modHash(functionName)) \
+	)
 """
 
 def compileCtoAsmFile(cPath, asmPath):
 	global mingwPath
 	subprocess.call([
-		os.path.join(mingwPath, 'gcc'), 
+		os.path.join(mingwPath, 'gcc'),
 		'-fno-asynchronous-unwind-tables',
 		'-s',
 		'-O3',
@@ -273,6 +304,10 @@ def compileCtoAsmFile(cPath, asmPath):
 def jmpShellCodeEntry(inAsmPath, outAsmPath):
 	with open(inAsmPath, 'r') as r:
 		src = r.read()
+		# src = src.replace('.rdata', 'shell')
+		if src.count(".rdata") > 0:
+			print '[!] Detect global variables !! It\'dangerous !! Take Care!!'
+
 		funcNameArr = re.findall(r'.globl[\t\x20]+(.+)', src, re.IGNORECASE)
 		entryFunc = ''
 		for eachFunc in funcNameArr:
@@ -280,17 +315,17 @@ def jmpShellCodeEntry(inAsmPath, outAsmPath):
 				entryFunc = eachFunc
 
 		with open(outAsmPath, 'w') as w:
-			w.write('.section shell,"x"\r\ncall %s\r\nret \r\n' % entryFunc + src)
+			w.write('.section shell,"x"\r\njmp %s\r\nnop\r\n' % entryFunc + src)
 
 def genObjAsmBinary(inAsmPath, outObjectFilePath, outAsmRawBinPath):
 	global mingwPath
 	subprocess.call([
-		os.path.join(mingwPath, 'as'), 
+		os.path.join(mingwPath, 'as'),
 		'-c', inAsmPath,
 		'-o', outObjectFilePath
 	], cwd=mingwPath)
 	subprocess.call([
-		os.path.join(mingwPath, 'objcopy'), 
+		os.path.join(mingwPath, 'objcopy'),
 		'-O', 'binary',
 		outObjectFilePath,
 		'-j', 'shell',
@@ -328,9 +363,28 @@ def genShellcode(cppPath, clearAfterRun):
 	shelltxtOut = preScriptPath + '_shellcode.txt'
 	with open(cpp, 'r') as i:
 		script = i.read()
-		script = script.replace('#include <shellDev>', shellDevHpp)
-		with open(tmpcpp, 'w') as w:
-			w.write(script)
+		#script = re.sub(r'\x22([^\x22]+)\x22', '')
+		tmpscript = ''
+		for line in script.splitlines():
+
+			additionData = ''
+			if 'fetchAPI' in line:
+				m = re.compile(r'.*fetchAPI\([\x20]*([^,)]+)[\x20]*,[\x20]*([^\)]+)[\x20]*\)').match(line)
+				replaceData = '''
+char str_%(definedFuncName)s[] = "%(WinApiName)s";
+func<decltype(&%(WinApiName)s)> %(definedFuncName)s( (FARPROC) blindFindFunc( modHash(str_%(definedFuncName)s) ) );
+''' % { 'definedFuncName' : m.group(1).replace('\x20', ''), 'WinApiName' : m.group(2).replace('\x20', '')}
+				print '[+] Detect fetchAPI() from %s -> %s' % ( m.group(2).replace('\x20', ''), m.group(1).replace('\x20', ''))
+				line = line.replace(m.group(0), replaceData)
+
+			for argStr in re.findall(r'[(\x20,]+(\x22[^\x22]+\x22)[\x20,)]', line):
+				argStrNewName = 'str_' + hashlib.md5(argStr).hexdigest();
+				additionData += 'char %s[] = %s;\n' % (argStrNewName, argStr);
+				line = line.replace(argStr, argStrNewName);
+			tmpscript += additionData + line + '\n'
+
+		tmpscript = tmpscript.replace('#include <shellDev>', shellDevHpp)
+		with open(tmpcpp, 'w') as w: w.write(tmpscript)
 
 	compileCtoAsmFile(tmpcpp, asm)
 	jmpShellCodeEntry(asm, shellAsm)
