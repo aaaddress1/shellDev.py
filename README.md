@@ -10,6 +10,17 @@ A simple python script for building windows 32bit/64bit shellcode in C.
 * Python 2.7 <https://www.python.org/download/releases/2.7/>
 * MinGW-w64 <https://sourceforge.net/projects/mingw-w64/>
 
+## Demo（簡單展示）
+
+[![Demo on Youtube](https://img.youtube.com/vi/4-M6abqaV3c/0.jpg)](https://www.youtube.com/watch?v=4-M6abqaV3c)
+
+Building 32bit Windows shellcode:
+`> python shellDev.py -m C:\MinGW\mingw32\ -s msg.cpp --jit32`
+
+Building 62bit Windows shellcode:
+`> python shellDev.py -m C:\MinGW\mingw64\ -s msg.cpp --jit64`
+
+
 ## shellDev.py Quickly Start 
 
 demo.cpp（shellDev 腳本範例）
@@ -136,16 +147,6 @@ you must define your own function in `shellFunc` calling convention if you want 
 all variables should be defined as local variables, global variables will lead to crash. (the string parameters you pass to functions should be defined as local variables too)
 
 因為定址方式問題，所以 shellDev 腳本不允許宣告任何全域變數、僅允許以區域變數存放資料，否則產出的 Shellcode 使用後必定會導致程式異常崩潰。即便是傳入給函數的文字常數，也務必先以區域變數保存，在傳遞給函數才能確保 Shellcode 正常運行。
-
-## Usage（使用方式）
-
-[![Demo on Youtube](http://img.youtube.com/vi/LAL2HCVkprU/0.jpg)](https://www.youtube.com/watch?v=LAL2HCVkprU&feature=youtu.be)
-
-Building 32bit Windows shellcode:
-`> python shellDev.py -m C:\MinGW\mingw32\ -s msg.cpp`
-
-Building 62bit Windows shellcode:
-`> python shellDev.py -m C:\MinGW\mingw64\ -s msg.cpp`
 
 ## Contact
 
