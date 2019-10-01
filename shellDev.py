@@ -1,14 +1,65 @@
 title = \
 """
       _          _ _ _____
-     | |        | | |  __ \
+     | |        | | |  __ \\
   ___| |__   ___| | | |  | | _____   __
  / __| '_ \ / _ \ | | |  | |/ _ \ \ / /
  \__ \ | | |  __/ | | |__| |  __/\ V /
  |___/_| |_|\___|_|_|_____/ \___| \_/
 
-v1.1 by aaaddress1@chroot.org
+v1.2 by aaaddress1@chroot.org
 """
+
+# -------------------- Injection ------------------- #
+from ctypes import *
+import ctypes
+import ctypes.wintypes
+
+from ctypes.wintypes import BOOL
+from ctypes.wintypes import DWORD
+from ctypes.wintypes import HANDLE
+from ctypes.wintypes import LPVOID
+from ctypes.wintypes import LPCVOID
+import win32process
+LPCSTR = LPCTSTR = ctypes.c_char_p
+LPDWORD = PDWORD = ctypes.POINTER(DWORD)
+class _SECURITY_ATTRIBUTES(ctypes.Structure):
+    _fields_ = [('nLength', DWORD),
+                ('lpSecurityDescriptor', LPVOID),
+                ('bInheritHandle', BOOL),]
+SECURITY_ATTRIBUTES = _SECURITY_ATTRIBUTES
+LPSECURITY_ATTRIBUTES = ctypes.POINTER(_SECURITY_ATTRIBUTES)
+LPTHREAD_START_ROUTINE = LPVOID
+
+
+def jitInject(path, shellcode):
+	info = win32process.CreateProcess(None, path, None, None, False, 0x04, None, None, win32process.STARTUPINFO())  
+	page_rwx_value = 0x40
+	process_all = 0x1F0FFF
+	memcommit = 0x00001000
+
+	shellcode_length = len(shellcode)
+	process_handle = info[0].handle # phandle
+
+	VirtualAllocEx = windll.kernel32.VirtualAllocEx
+	VirtualAllocEx.restype = LPVOID
+	VirtualAllocEx.argtypes = (HANDLE, LPVOID, DWORD, DWORD, DWORD)
+
+	WriteProcessMemory = ctypes.windll.kernel32.WriteProcessMemory
+	WriteProcessMemory.restype = BOOL
+	WriteProcessMemory.argtypes = (HANDLE, LPVOID, LPCVOID, DWORD, DWORD)
+
+	CreateRemoteThread = ctypes.windll.kernel32.CreateRemoteThread
+	CreateRemoteThread.restype = HANDLE
+	CreateRemoteThread.argtypes = (HANDLE, LPSECURITY_ATTRIBUTES, DWORD, LPTHREAD_START_ROUTINE, LPVOID, DWORD, DWORD)
+
+	lpBuffer = VirtualAllocEx(process_handle, 0, shellcode_length, memcommit, page_rwx_value)
+	print(hex(lpBuffer))
+	WriteProcessMemory(process_handle, lpBuffer, shellcode, shellcode_length, 0)
+	CreateRemoteThread(process_handle, None, 0, lpBuffer, 0, 0, 0)
+	print('JIT Injection, done.')
+# -------------------------------------------------- #
+
 
 import subprocess
 import re
@@ -341,7 +392,7 @@ def arrayifyBinaryRawFile(asmRawBinPath):
 		retn += 'unsigned int shellcode_size = %i;\n' % len(data)
 		return retn
 
-def genShellcode(cppPath, clearAfterRun):
+def genShellcode(cppPath, clearAfterRun, jitInj = None):
 	dir = os.getcwd()
 
 	if len(os.path.dirname(cppPath)) == 0:
@@ -390,9 +441,20 @@ func<decltype(&%(WinApiName)s)> %(definedFuncName)s( (FARPROC) blindFindFunc( mo
 	jmpShellCodeEntry(asm, shellAsm)
 	genObjAsmBinary(shellAsm, obj, binraw)
 
-	with open(shelltxtOut, 'w') as w:
-		w.write(arrayifyBinaryRawFile(binraw))
-	print('shellcode saved at %s' % shelltxtOut)
+	if   jitInj == 'x86':
+		print('[+] jit mode: 32bit')
+		with open(binraw, 'rb') as binary_file:
+			data = binary_file.read()
+			jitInject('C:\\Windows\\SysWoW64\\notepad.exe', data)
+	elif jitInj == 'x64':
+		print('[+] jit mode: 64bit')
+		with open(binraw, 'rb') as binary_file:
+			data = binary_file.read()
+			jitInject('C:\\Windows\\System32\\notepad.exe', data)
+	else:
+		with open(shelltxtOut, 'w') as w:
+			w.write(arrayifyBinaryRawFile(binraw))
+			print('shellcode saved at %s' % shelltxtOut)
 
 	if clearAfterRun:
 		os.remove(asm)
@@ -432,9 +494,21 @@ if __name__ == "__main__":
 	parser.add_option("--noclear",
 	      action="store_true", dest="dontclear", default=False,
 	      help="don't clear junk file after generate shellcode.")
+
+	parser.add_option("--jit32",
+	      action="store_true", dest="jit32", default=False,
+	      help="Just In Time Compile and Run Shellcode (as x86 Shellcode & Inject to Notepad for test, require run as admin.)")
+
+	parser.add_option("--jit64",
+	      action="store_true", dest="jit64", default=False,
+	      help="Just In Time Compile and Run Shellcode (as x64 Shellcode & Inject to Notepad for test, require run as admin.)")
+
 	(options, args) = parser.parse_args()
 	if options.source is None or options.mingwPath is None:
 		parser.print_help()
 	else:
+		jitArch = None
+		if options.jit32: jitArch = 'x86'
+		if options.jit64: jitArch = 'x64'
 		chkMinGwToolkit(options.mingwPath)
-		genShellcode(options.source, not options.dontclear)
+		genShellcode(options.source, not options.dontclear, jitArch)
