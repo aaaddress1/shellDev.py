@@ -406,7 +406,7 @@ def genShellcode(cppPath, clearAfterRun, jitInj = None):
 	postScriptPath = os.path.splitext(cppPath)[1]
 
 	cpp = preScriptPath + postScriptPath
-	tmpcpp = preScriptPath + '_tmp' + postScriptPath
+	tmpcpp = preScriptPath + '_tmp.cpp'
 	asm = preScriptPath + 's'
 	shellAsm = preScriptPath + '_shell.s'
 	obj = preScriptPath + '.o'
