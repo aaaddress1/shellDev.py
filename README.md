@@ -1,4 +1,4 @@
-![螢幕快照 2018-02-18 上午10.55.26.png](resources/33032DBAA305F49DAAC4705D6967CB15.png)
+![螢幕快照 2018-02-18 上午10.55.26.png](resources/2021demo.png)
 
 ## shellDev.py
 
@@ -7,8 +7,9 @@ A simple python script for building windows 32bit/64bit shellcode in C.
 以 C 語言快速開發支持 Windows 32/64 位元的 Shellcode 之 Python 腳本。
 
 ## Preinstall（前置安裝）
-* Python 2.7 <https://www.python.org/download/releases/2.7/>
-* MinGW-w64 <https://sourceforge.net/projects/mingw-w64/>
+* Python3
+* MinGW or TDM-GCC
+* $python -m pip install pypiwin32
 
 ## Demo（簡單展示）
 
