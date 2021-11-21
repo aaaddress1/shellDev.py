@@ -7,7 +7,7 @@ title = \
  \__ \ | | |  __/ | | |__| |  __/\ V /
  |___/_| |_|\___|_|_|_____/ \___| \_/
 
-v1.2 by aaaddress1@chroot.org
+v1.3 by aaaddress1@chroot.org
 """
 
 # -------------------- Injection ------------------- #
@@ -336,7 +336,7 @@ PVOID blindFindFunc(uint32_t funcNameHash)
 	)
 """
 
-def compileCtoAsmFile(cPath, asmPath):
+def compileCtoAsmFile(cPath, asmPath, arch):
 	global mingwPath
 	subprocess.call([
 		os.path.join(mingwPath, 'gcc'),
@@ -348,6 +348,7 @@ def compileCtoAsmFile(cPath, asmPath):
 		'-Wa,-R',
 		'-Wa,-mintel',
 		'-falign-functions=1',
+		arch,
 		'-c', cPath,
 		'-o', asmPath
 	], cwd=mingwPath)
@@ -357,7 +358,7 @@ def jmpShellCodeEntry(inAsmPath, outAsmPath):
 		src = r.read()
 		# src = src.replace('.rdata', 'shell')
 		if src.count(".rdata") > 0:
-			print '[!] Detect global variables !! It\'dangerous !! Take Care!!'
+			print('[!] Detect global variables !! It\'dangerous !! Take Care!!')
 
 		funcNameArr = re.findall(r'.globl[\t\x20]+(.+)', src, re.IGNORECASE)
 		entryFunc = ''
@@ -368,10 +369,11 @@ def jmpShellCodeEntry(inAsmPath, outAsmPath):
 		with open(outAsmPath, 'w') as w:
 			w.write('.section shell,"x"\r\njmp %s\r\nnop\r\n' % entryFunc + src)
 
-def genObjAsmBinary(inAsmPath, outObjectFilePath, outAsmRawBinPath):
+def genObjAsmBinary(inAsmPath, outObjectFilePath, outAsmRawBinPath, arch):
 	global mingwPath
 	subprocess.call([
-		os.path.join(mingwPath, 'as'),
+		os.path.join(mingwPath, 'gcc'),
+		arch,
 		'-c', inAsmPath,
 		'-o', outObjectFilePath
 	], cwd=mingwPath)
@@ -383,16 +385,14 @@ def genObjAsmBinary(inAsmPath, outObjectFilePath, outAsmRawBinPath):
 		outAsmRawBinPath
 	], cwd=mingwPath)
 
-def arrayifyBinaryRawFile(asmRawBinPath):
-	with open(asmRawBinPath, 'rb') as binary_file:
-		data =binary_file.read()
-		dataHexArr = ', '.join(['0x%02X' % ord(i) for i in data])
-		dataHexArr = re.sub('(' + '0x\w\w, '*12 +')', r'\1\n', dataHexArr)
-		retn = 'unsigned char shellcode[] = {\n%s };\r\n' % dataHexArr
-		retn += 'unsigned int shellcode_size = %i;\n' % len(data)
-		return retn
+def arrayifyBinaryRawFile(binary):
+	dataHexArr = ', '.join(['0x%02X' % (i) for i in binary])
+	dataHexArr = re.sub('(' + '0x\w\w, '*12 +')', r'\1\n', dataHexArr)
+	retn = 'unsigned char shellcode[] = {\n%s };\r\n' % dataHexArr
+	retn += 'unsigned int shellcode_size = %i;\n' % len(binary)
+	return retn
 
-def genShellcode(cppPath, clearAfterRun, jitInj = None):
+def genShellcode(cppPath, clearAfterRun, arch, jitInj = None):
 	dir = os.getcwd()
 
 	if len(os.path.dirname(cppPath)) == 0:
@@ -412,9 +412,9 @@ def genShellcode(cppPath, clearAfterRun, jitInj = None):
 	obj = preScriptPath + '.o'
 	binraw = preScriptPath + '.bin'
 	shelltxtOut = preScriptPath + '_shellcode.txt'
+	shellcodeBin = preScriptPath + '_shellcode.bin'
 	with open(cpp, 'r') as i:
 		script = i.read()
-		#script = re.sub(r'\x22([^\x22]+)\x22', '')
 		tmpscript = ''
 		for line in script.splitlines():
 
@@ -425,36 +425,37 @@ def genShellcode(cppPath, clearAfterRun, jitInj = None):
 char str_%(definedFuncName)s[] = "%(WinApiName)s";
 func<decltype(&%(WinApiName)s)> %(definedFuncName)s( (FARPROC) blindFindFunc( modHash(str_%(definedFuncName)s) ) );
 ''' % { 'definedFuncName' : m.group(1).replace('\x20', ''), 'WinApiName' : m.group(2).replace('\x20', '')}
-				print '[+] Detect fetchAPI() from %s -> %s' % ( m.group(2).replace('\x20', ''), m.group(1).replace('\x20', ''))
+				print('[+] Detect fetchAPI() from %s -> %s' % ( m.group(2).replace('\x20', ''), m.group(1).replace('\x20', '')))
 				line = line.replace(m.group(0), replaceData)
 
 			for argStr in re.findall(r'[(\x20,]+(\x22[^\x22]+\x22)[\x20,)]', line):
-				argStrNewName = 'str_' + hashlib.md5(argStr).hexdigest();
+				argStrNewName = 'str_' + hashlib.md5(argStr.encode()).hexdigest();
 				additionData += 'char %s[] = %s;\n' % (argStrNewName, argStr);
-				line = line.replace(argStr, argStrNewName);
+				line = line.replace(argStr, argStrNewName)
 			tmpscript += additionData + line + '\n'
 
 		tmpscript = tmpscript.replace('#include <shellDev>', shellDevHpp)
 		with open(tmpcpp, 'w') as w: w.write(tmpscript)
 
-	compileCtoAsmFile(tmpcpp, asm)
+	compileCtoAsmFile(tmpcpp, asm, '-m32' if arch == 'x86' else '-m64')
 	jmpShellCodeEntry(asm, shellAsm)
-	genObjAsmBinary(shellAsm, obj, binraw)
+	genObjAsmBinary(shellAsm, obj, binraw,  '-m32' if arch == 'x86' else '-m64')
 
-	if   jitInj == 'x86':
-		print('[+] jit mode: 32bit')
-		with open(binraw, 'rb') as binary_file:
-			data = binary_file.read()
-			jitInject('C:\\Windows\\SysWoW64\\notepad.exe', data)
-	elif jitInj == 'x64':
-		print('[+] jit mode: 64bit')
-		with open(binraw, 'rb') as binary_file:
-			data = binary_file.read()
-			jitInject('C:\\Windows\\System32\\notepad.exe', data)
+	shellcodeBytecode = open(binraw, 'rb').read()
+	if jitInj:
+		if arch == 'x86':
+			print('[+] jit mode: 32bit')
+			jitInject('C:\\Windows\\SysWoW64\\notepad.exe', shellcodeBytecode)
+		elif arch == 'x64':
+			print('[+] jit mode: 64bit')
+			jitInject('C:\\Windows\\System32\\notepad.exe', shellcodeBytecode)
 	else:
 		with open(shelltxtOut, 'w') as w:
-			w.write(arrayifyBinaryRawFile(binraw))
-			print('shellcode saved at %s' % shelltxtOut)
+			w.write(arrayifyBinaryRawFile(shellcodeBytecode))
+			print('[v] shellcode saved at %s' % shelltxtOut)
+		with open(shellcodeBin, 'wb') as w:
+			w.write(shellcodeBytecode)
+			print('[v] shellcode *binary* saved at %s' % shellcodeBin)
 
 	if clearAfterRun:
 		os.remove(asm)
@@ -465,9 +466,9 @@ func<decltype(&%(WinApiName)s)> %(definedFuncName)s( (FARPROC) blindFindFunc( mo
 
 def chkExeExist(name, path):
 	if os.path.exists(path):
-		print '\t[v] %s exists!' % name
+		print('\t[v] %s exists!' % name)
 	else:
-		print '\t[x] %s not found at %s' % (name, path)
+		print('\t[x] %s not found at %s' % (name, path))
 		sys.exit(1)
 
 def chkMinGwToolkit(usrInputMinGWPath):
@@ -476,9 +477,9 @@ def chkMinGwToolkit(usrInputMinGWPath):
 	if not 'bin' in mingwPath:
 		mingwPath = os.path.join(mingwPath, 'bin')
 		if os.path.exists(mingwPath):
-			print '[v] check mingw tool path: %s ' % mingwPath
+			print('[v] check mingw tool path: %s ' % mingwPath)
 		else:
-			print '[x] sorry, mingw toolkit not found in %s' % mingwPath
+			print('[x] sorry, mingw toolkit not found in %s' % mingwPath)
 	chkExeExist('gcc', os.path.join(mingwPath, 'gcc.exe'))
 	chkExeExist('as', os.path.join(mingwPath, 'as.exe'))
 	chkExeExist('objcopy', os.path.join(mingwPath, 'objcopy.exe'))
@@ -495,20 +496,16 @@ if __name__ == "__main__":
 	      action="store_true", dest="dontclear", default=False,
 	      help="don't clear junk file after generate shellcode.")
 
-	parser.add_option("--jit32",
-	      action="store_true", dest="jit32", default=False,
+	parser.add_option("-a", "--arch", dest="arch",
+	      help="Arch - should be x86 or x64")
+
+	parser.add_option("--jit",
+	      action="store_true", dest="jit", default=False,
 	      help="Just In Time Compile and Run Shellcode (as x86 Shellcode & Inject to Notepad for test, require run as admin.)")
 
-	parser.add_option("--jit64",
-	      action="store_true", dest="jit64", default=False,
-	      help="Just In Time Compile and Run Shellcode (as x64 Shellcode & Inject to Notepad for test, require run as admin.)")
-
 	(options, args) = parser.parse_args()
-	if options.source is None or options.mingwPath is None:
+	if options.source is None or options.mingwPath is None  or options.arch not in ['x86', 'x64']:
 		parser.print_help()
 	else:
-		jitArch = None
-		if options.jit32: jitArch = 'x86'
-		if options.jit64: jitArch = 'x64'
 		chkMinGwToolkit(options.mingwPath)
-		genShellcode(options.source, not options.dontclear, jitArch)
+		genShellcode(options.source, not options.dontclear, options.arch, options.jit)
